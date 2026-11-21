@@ -1,7 +1,8 @@
 Ace (Ajax.org Cloud9 Editor)
 ============================
 
-[![Build Status](https://secure.travis-ci.org/ajaxorg/ace.svg?branch=master)](http://travis-ci.org/ajaxorg/ace) [![npm](https://img.shields.io/npm/v/ace-builds.svg)](https://www.npmjs.com/package/ace-builds)
+[![Build Status](https://github.com/ajaxorg/ace/workflows/CI/badge.svg)](https://github.com/ajaxorg/ace/actions) 
+[![npm](https://img.shields.io/npm/v/ace-builds.svg)](https://www.npmjs.com/package/ace-builds)
 
 _Note_: The new site at http://ace.c9.io contains all the info below along with an embedding guide and all the other resources you need to get started with Ace.
 
@@ -25,6 +26,7 @@ Features
 * Code folding
 * Multiple cursors and selections
 * Live syntax checker (currently JavaScript/CoffeeScript/CSS/XQuery)
+* Full language client support for many languages available via [ace-linters](https://github.com/mkslanc/ace-linters)
 * Cut, copy, and paste functionality
 
 Take Ace for a spin!
@@ -49,6 +51,7 @@ The easiest version is simply:
     var editor = ace.edit("editor");
 </script>
 ```
+*Exploring configuration options [Configuring-Ace](https://github.com/ajaxorg/ace/wiki/Configuring-Ace/)*
 
 With "editor" being the id of the DOM element, which should be converted to an editor. Note that this element must be explicitly sized and positioned `absolute` or `relative` for Ace to work. e.g.
 
@@ -98,11 +101,11 @@ Documentation
 
 Additional usage information, including events to listen to and extending syntax highlighters, can be found [on the main Ace website](http://ace.c9.io).
 
-You can also find API documentation at [http://ace.c9.io/#nav=api](http://ace.c9.io/#nav=api).
+You can also find API documentation at [https://ajaxorg.github.io/ace-api-docs/](https://ajaxorg.github.io/ace-api-docs/).
 
 Also check out the sample code for the kitchen sink [demo app](https://github.com/ajaxorg/ace/blob/master/demo/kitchen-sink/demo.js).
 
-If you still need help, feel free to drop a mail on the [ace mailing list](http://groups.google.com/group/ace-discuss), or at `irc.freenode.net#ace`.
+If you still need help, feel free to ask a question on our [discussions page](https://github.com/ajaxorg/ace/discussions).
 
 Running Ace
 -----------
@@ -146,14 +149,14 @@ Running the Unit Tests
 The Ace unit tests can run on node.js. Assuming you have already done `npm install`, just call:
 
 ```bash
-node lib/ace/test/all.js
+npm run test
 ```
 
 You can also run the tests in your browser by serving:
 
-    http://localhost:8888/lib/ace/test/tests.html
+    http://localhost:8888/src/test/tests.html
 
-This makes debugging failing tests way more easier.
+This makes debugging failing tests much easier.
 
 Contributing
 -----------------------------

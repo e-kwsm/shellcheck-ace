@@ -60,7 +60,16 @@ body {
     background-color: #eee;
     pointer-events: none;
     transition: 0.5s;
-} 
+}
+
+#sidePanel *:focus {
+    outline: 3px solid orange;
+}
+
+#sidePanel a {
+    display: inline-block;
+}
+
 #sidePanel:not(.closed) .toggleButton >div:nth-child(1) {transform: translate(0px, 5px) rotate(-45deg)}
 #sidePanel:not(.closed) .toggleButton >div:nth-child(2) {opacity: 0}
 #sidePanel:not(.closed) .toggleButton >div:nth-child(3) {transform: translate(0px, -5px) rotate(45deg)}
@@ -83,4 +92,36 @@ body {
     z-index: 1000!important;
     opacity: 1!important;
     font-size: 1em!important;
+}
+
+
+.language_highlight_error {
+	position: absolute;
+	border-bottom: dotted 1px #e00404;
+	z-index: 2000;
+    border-radius: 0;
+}
+.language_highlight_warning {
+	position: absolute;
+	border-bottom: solid 1px #DDC50F;
+	z-index: 2000;
+    border-radius: 0;
+}
+.language_highlight_info {
+	position: absolute;
+	border-bottom: dotted 1px #999;
+	z-index: 2000;
+    border-radius: 0;
+}
+.language_highlight_text, .language_highlight_read, .language_highlight_write {
+	position: absolute;
+	box-sizing: border-box;
+	border: solid 1px #888;
+	z-index: 2000;
+}
+.language_highlight_write {
+    border: solid 1px #F88;
+}
+.ace_tooltip pre {
+    margin: 0;
 }
