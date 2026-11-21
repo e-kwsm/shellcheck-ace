@@ -1,38 +1,4 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Distributed under the BSD license:
- *
- * Copyright (c) 2010, Ajax.org B.V.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Ajax.org B.V. nor the
- *       names of its contributors may be used to endorse or promote products
- *       derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL AJAX.ORG B.V. BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * ***** END LICENSE BLOCK ***** */
-
-
-define(function(require, exports, module) {
 "use strict";
-
-require("ace/lib/fixoldbrowsers");
 
 require("ace/ext/rtl");
 
@@ -42,13 +8,17 @@ var devUtil = require("./dev_util");
 require("./file_drop");
 
 var config = require("ace/config");
-config.init();
+config.setLoader(function(moduleName, cb) {
+    require([moduleName], function(module) {
+        cb(null, module);
+    });
+});
+
 var env = {};
 
 var dom = require("ace/lib/dom");
 var net = require("ace/lib/net");
 var lang = require("ace/lib/lang");
-var useragent = require("ace/lib/useragent");
 
 var event = require("ace/lib/event");
 var theme = require("ace/theme/textmate");
@@ -59,9 +29,11 @@ var HashHandler = require("ace/keyboard/hash_handler").HashHandler;
 
 var Renderer = require("ace/virtual_renderer").VirtualRenderer;
 var Editor = require("ace/editor").Editor;
+var Range = require("ace/range").Range;
 
 var whitespace = require("ace/ext/whitespace");
 
+var createDiffView = require("ace/ext/diff").createDiffView;
 
 
 var doclist = require("./doclist");
@@ -69,11 +41,10 @@ var layout = require("./layout");
 var util = require("./util");
 var saveOption = util.saveOption;
 
+require("ace/ext/elastic_tabstops_lite");
+require("ace/incremental_search");
 
-var ElasticTabstopsLite = require("ace/ext/elastic_tabstops_lite").ElasticTabstopsLite;
-
-var IncrementalSearch = require("ace/incremental_search").IncrementalSearch;
-
+require("ace/ext/whitespaces_in_selection");
 
 var TokenTooltip = require("./token_tooltip").TokenTooltip;
 require("ace/config").defineOptions(Editor.prototype, "editor", {
@@ -93,6 +64,116 @@ require("ace/config").defineOptions(Editor.prototype, "editor", {
         handlesSet: true
     }
 });
+
+require("ace/config").defineOptions(Editor.prototype, "editor", {
+    useAceLinters: {
+        set: function(val) {
+            var enabled = !!val;
+            if (enabled && !window.languageProvider) {
+                loadLanguageProvider(this);
+            }
+            else if (enabled) {
+                window.languageProvider.registerEditor(this);
+            } else {
+                if (window.languageProvider) {
+                    window.languageProvider.unregisterEditor(this, true);
+                    window.languageProvider = null;
+                }
+                if (this.getOption("useAceSpellCheck")) {
+                    this.setOption("useAceSpellCheck", false);
+                    saveOption("useAceSpellCheck", false);
+                    if (env.optionsPanel) {
+                        env.optionsPanel.editor = this;
+                        env.optionsPanel.render();
+                    }
+                }
+            }
+        }
+    }
+});
+
+require("ace/config").defineOptions(Editor.prototype, "editor", {
+    useAceSpellCheck: {
+        set: function(val) {
+            var nextValue = !!val;
+            if (window.useAceSpellCheck === nextValue) return;
+            window.useAceSpellCheck = nextValue;
+            if (nextValue && !this.getOption("useAceLinters")) {
+                this.setOption("useAceLinters", true);
+                saveOption("useAceLinters", true);
+                if (env.optionsPanel) {
+                    env.optionsPanel.editor = this;
+                    env.optionsPanel.render();
+                }
+                return;
+            }
+            if (window.languageProvider && this.getOption("useAceLinters")) {
+                window.languageProvider.unregisterEditor(this, true);
+                window.languageProvider = null;
+                loadLanguageProvider(this);
+            }
+        },
+        get: function() {
+            return window.useAceSpellCheck !== false;
+        },
+        handlesSet: true
+    }
+});
+
+var {HoverTooltip} = require("ace/tooltip");
+var MarkerGroup = require("ace/marker_group").MarkerGroup;
+var docTooltip = new HoverTooltip();
+window.useAceSpellCheck = true;
+
+function loadLanguageProvider(editor) {
+    function loadScript(cb) {
+        if (define.amd) {
+            require([
+                "https://mkslanc.github.io/ace-linters/build/ace-linters.js"
+            ], function(m) {
+                cb(m.LanguageProvider);
+            });
+        } else {
+            net.loadScript([
+                "https://mkslanc.github.io/ace-linters/build/ace-linters.js"
+            ], function() {
+                cb(window.LanguageProvider);
+            });
+        }
+    }
+    loadScript(function(LanguageProvider) {
+        var services = [];
+        if (window.useAceSpellCheck !== false) {
+            services.push({
+                name: "ace-spell-check",
+                className: "AceSpellCheck",
+                modes: "*",
+                script: "ace-spell-check.js",
+                cdnUrl: "https://unpkg.com/ace-spell-check@latest/build"
+            });
+        }
+
+        var languageProvider = LanguageProvider.fromCdn({
+            services: services,
+            serviceManagerCdn:"https://mkslanc.github.io/ace-linters/build",
+            includeDefaultLinters: true
+        }, {
+            functionality: {
+                hover: true,
+                completion: {
+                    overwriteCompleters: true
+                },
+                completionResolve: true,
+                format: true,
+                documentHighlights: true,
+                signatureHelp: false
+            }
+        });
+        window.languageProvider = languageProvider;
+        languageProvider.registerEditor(editor);
+    });
+}
+
 
 
 var workerModule = require("ace/worker/worker_client");
@@ -255,13 +336,22 @@ commands.addCommand({
 
 
 /*********** manage layout ***************************/
-var sidePanelContainer = document.getElementById("sidePanel");
-sidePanelContainer.onclick = function(e) {
+function handleToggleActivate(target) {
     if (dom.hasCssClass(sidePanelContainer, "closed"))
         onResize(null, false);
-    else if (dom.hasCssClass(e.target, "toggleButton"))
+    else if (dom.hasCssClass(target, "toggleButton"))
         onResize(null, true);
-}
+};
+var sidePanelContainer = document.getElementById("sidePanel");
+sidePanelContainer.onclick = function(e) {
+    handleToggleActivate(e.target);
+};
+var optionToggle = document.getElementById("optionToggle");
+optionToggle.onkeydown = function(e) {
+    if (e.code === "Space" || e.code === "Enter") {
+        handleToggleActivate(e.target);
+    }
+};
 var consoleHeight = 20;
 function onResize(e, closeSidePanel) {
     var left = 280;
@@ -269,8 +359,11 @@ function onResize(e, closeSidePanel) {
     var height = document.documentElement.clientHeight;
     if (closeSidePanel == null)
         closeSidePanel = width < 2 * left;
-    if (closeSidePanel)
+    if (closeSidePanel) {
         left = 20;
+        document.getElementById("optionToggle").setAttribute("aria-label", "Show Options");
+    } else
+        document.getElementById("optionToggle").setAttribute("aria-label", "Hide Options");
     width -= left;
     container.style.width = width + "px";
     container.style.height = height - consoleHeight + "px";
@@ -290,6 +383,7 @@ window.onresize = onResize;
 onResize();
 
 /*********** options panel ***************************/
+var diffView;
 doclist.history = doclist.docs.map(function(doc) {
     return doc.name;
 });
@@ -313,22 +407,36 @@ doclist.addToHistory = function(name) {
         h.index = h.push(name);
     }
 };
+
+var initDoc = (session) => {
+    if (!session)
+        return;
+    doclist.addToHistory(session.name);
+    session = env.split.setSession(session);
+    whitespace.detectIndentation(session);
+    optionsPanel.render();
+    env.editor.focus();
+    if (diffView) {
+        diffView.detach()
+        diffView = createDiffView({
+            inline: "b",
+            editorB: editor,
+            valueA: editor.getValue()
+        });
+    }
+}
+
 doclist.pickDocument = function(name) {
-    doclist.loadDoc(name, function(session) {
-        if (!session)
-            return;
-        doclist.addToHistory(session.name);
-        session = env.split.setSession(session);
-        whitespace.detectIndentation(session);
-        optionsPanel.render();
-        env.editor.focus();
-    });
+    doclist.loadDoc(name, initDoc);
 };
 
 
 
 var OptionPanel = require("ace/ext/options").OptionPanel;
-var optionsPanel = new OptionPanel(env.editor);
+var optionsPanel = env.optionsPanel = new OptionPanel(env.editor);
+
+var originalAutocompleteCommand = null;
+
 
 optionsPanel.add({
     Main: {
@@ -371,6 +479,31 @@ optionsPanel.add({
                     ? "Below"
                     : "Beside";
             }
+        },
+        "Show diffs": {
+            position: -102,
+            type: "buttonBar",
+            path: "diffView",
+            values: ["None", "Inline"],
+            onchange: function (value) {
+                    if (value === "Inline" && !diffView) {
+                        diffView = createDiffView({
+                            inline: "b",
+                            editorB: editor,
+                            valueA: editor.getValue()
+                        });
+                    }
+                    else if (value === "None") {
+                        if (diffView) {
+                            diffView.detach();
+                            diffView = null;
+                        }
+                    }
+            },
+            getValue: function() {
+                return !diffView ? "None"
+                    : "Inline";
+            }
         }
     },
     More: {
@@ -385,6 +518,42 @@ optionsPanel.add({
         "Show token info": {
             path: "showTokenInfo",
             position: 2000
+        },
+        "Inline preview for autocomplete": {
+            path: "inlineEnabledForAutocomplete",
+            position: 2000,
+            onchange: function(value) {
+                var Autocomplete = require("ace/autocomplete").Autocomplete;
+                if (value && !originalAutocompleteCommand) {
+                    originalAutocompleteCommand = Autocomplete.startCommand.exec;
+                    Autocomplete.startCommand.exec = function(editor) {
+                        var autocomplete = Autocomplete.for(editor);
+                        autocomplete.inlineEnabled = true;
+                        originalAutocompleteCommand(...arguments);
+                    }
+                } else if (!value) {
+                    var autocomplete = Autocomplete.for(editor);
+                    autocomplete.destroy();
+                    if (originalAutocompleteCommand)
+                        Autocomplete.startCommand.exec = originalAutocompleteCommand;
+                    originalAutocompleteCommand = null;
+                }
+            },
+            getValue: function() {
+                return !!originalAutocompleteCommand;
+            }
+        },
+        "Use Ace Linters": {
+            position: 3000,
+            path: "useAceLinters"
+        },
+        "Use Spell Checker": {
+            position: 3001,
+            path: "useAceSpellCheck"
+        },
+        "Show whitespaces in selection": {
+            position: 3100,
+            path: "showWhitespacesInSelection"
         },
         "Show Textarea Position": devUtil.textPositionDebugger,
         "Text Input Debugger": devUtil.textInputDebugger,
@@ -403,8 +572,33 @@ function updateUIEditorOptions() {
     optionsPanel.render();
 }
 
-optionsPanel.setOption("doc", util.getOption("doc") || "JavaScript");
+env.editor.on("changeSession", function() {
+    for (var i in env.editor.session.$options) {
+        if (i == "mode") continue;
+        var value = util.getOption(i);
+        if (value != undefined) {
+            env.editor.setOption(i, value);
+        }
+    }
+});
+
+if (localStorage.last_session) {
+    try {
+        var sessionObj = JSON.parse(localStorage.last_session);
+        var session = EditSession.fromJSON(localStorage.last_session);
+        session.name = sessionObj.name;
+        var cachedDoc = doclist.fileCache[session.name.toLowerCase()];
+        if (cachedDoc) {
+            cachedDoc.session = session;
+        }
+        initDoc(session);
+    } catch (e) {
+        console.error(e);
+        optionsPanel.setOption("doc", util.getOption("doc") || "JavaScript");
+    }
+}
 for (var i in optionsPanel.options) {
+    if (i === "doc") continue;
     var value = util.getOption(i);
     if (value != undefined) {
         if ((i == "mode" || i == "theme") && !/[/]/.test(value))
@@ -412,6 +606,7 @@ for (var i in optionsPanel.options) {
         optionsPanel.setOption(i, value);
     }
 }
+optionsPanel.render();
 
 
 function synchroniseScrolling() {
@@ -425,13 +620,6 @@ function synchroniseScrolling() {
 
 var StatusBar = require("ace/ext/statusbar").StatusBar;
 new StatusBar(env.editor, cmdLine.container);
-
-
-var Emmet = require("ace/ext/emmet");
-net.loadScript("https://cloud9ide.github.io/emmet-core/emmet.js", function() {
-    Emmet.setCore(window.emmet);
-    env.editor.setOption("enableEmmet", true);
-});
 
 require("ace/placeholder").PlaceHolder;
 
@@ -469,7 +657,7 @@ env.editSnippets = function() {
 };
 
 optionsPanelContainer.insertBefore(
-    dom.buildDom(["div", {style: "text-align:right;margin-right: 60px"},
+    dom.buildDom(["div", {style: "text-align:right;width: 80%"},
         ["div", {}, 
             ["button", {onclick: env.editSnippets}, "Edit Snippets"]],
         ["div", {}, 
@@ -480,14 +668,146 @@ optionsPanelContainer.insertBefore(
                 env.editor.setValue(info, -1);
                 env.editor.setOption("wrap", 80);
             }}, "Show Browser Info"]],
-        devUtil.getUI()
+        devUtil.getUI(),
+        ["div", {},
+            "Open Dialog ",
+            ["button",  {onclick: openTestDialog.bind(null, false)}, "Scale"],
+            ["button",  {onclick: openTestDialog.bind(null, true)}, "Height"]
+        ],
+        ["div", {},
+            ["button",  {onclick: function() {
+                editor.setOption("fontFamily", "cursive");
+                session.setValue( session.getValue() + "שלום עולם בעברית123" +"\n" + "ジャパン + 八洲\n" + "𒐫𒈙⸻ဪ", 1);
+            }}, "cursive"],
+            ["button",  {onclick: function() {
+                editor.setOption("fontFamily", "Tahoma");
+                session.setValue( session.getValue() + "שלום עולם בעברית123" +"\n" + "ジャパン + 八洲", 1);
+            }}, "Tahoma"],
+            ["button",  {onclick: function() {
+                var transforms = [
+                    '', 
+                    "scale(0.5)", 
+                    "translate(100%, 100%) rotate(180deg)", 
+                    "rotate(18deg)",
+                    "rotate(-18deg)",
+                    "scale(0.5, 0.9)", 
+                    'matrix3d(\
+                        1.8, 0.3, 0, 0.001,\
+                        -0.2, 2.1, 0, 0.003,\
+                        0, 0, 1, 0,\
+                        10, 20, 0, 1\
+                    )',
+                ];
+                var transform = editor.container.parentElement.style.transform;
+                var i = transforms.indexOf(transform);
+                transform = transforms[(i + 1) % transforms.length];
+                editor.container.parentElement.style.transform = transform;
+                editor.container.parentElement.style.transformOrigin = "0 0 0";
+                editor.setOption("hasCssTransforms", true);
+            }}, "Transform"],
+        ]
     ]),
     optionsPanelContainer.children[1]
 );
 
+
+var resetSession = () => {
+    if (localStorage) {
+        localStorage.last_session = undefined;
+    }
+    try {
+        var session = env.editor.session;
+        if (session.name)
+            var cachedDoc = doclist.fileCache[session.name.toLowerCase()];
+        if (cachedDoc) {
+            cachedDoc.session = undefined;
+        }
+        optionsPanel.setOption("doc", util.getOption("doc") || "JavaScript");
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+optionsPanelContainer.insertBefore(
+    dom.buildDom(["div", {style: "text-align:center;width: 100%"},
+        ["div", {},
+            ["button", {onclick: resetSession}, "Reset session"]],
+    ]),
+    optionsPanelContainer.children[0]
+);
+
+function openTestDialog(animateHeight) {
+    if (window.dialogEditor) 
+        window.dialogEditor.destroy();
+    var editor = ace.edit(null, {
+        value: "test editor", 
+        mode: "ace/mode/javascript",
+        enableBasicAutocompletion: true
+    });
+    window.dialogEditor = editor;
+
+    editor.completer.parentNode = editor.container;
+    if (window.languageProvider)
+        window.languageProvider.registerEditor(editor);
+
+    var dialog = dom.buildDom(["div", {
+        style: "transition: all 1s; position: fixed; z-index: 100000;"
+          + "background: darkblue; border: solid 1px black; display: flex; flex-direction: column"
+        }, 
+        ["div", {}, "test dialog"],
+        editor.container
+    ], document.body);
+    editor.container.style.flex = "1";
+    if (animateHeight) {
+        dialog.style.width = "0vw";
+        dialog.style.height = "0vh";
+        dialog.style.left = "20vw";
+        dialog.style.top = "20vh";
+        setTimeout(function() {            
+            dialog.style.width = "80vw";
+            dialog.style.height = "80vh";
+            dialog.style.left = "10vw";
+            dialog.style.top = "10vh";
+        }, 0);
+        
+    } else {
+        dialog.style.width = "80vw";
+        dialog.style.height = "80vh";
+        dialog.style.left = "10vw";
+        dialog.style.top = "10vh";
+        dialog.style.transform = "scale(0)";
+        setTimeout(function() {
+            dialog.style.transform = "scale(1)"
+        }, 0);
+    }
+    function close(e) {
+        if (!e || !dialog.contains(e.target)) {
+            if (animateHeight) {
+                dialog.style.width = "0vw";
+                dialog.style.height = "0vh";
+                dialog.style.left = "80vw";
+                dialog.style.top = "80vh";
+            } else {
+                dialog.style.transform = "scale(0)"
+            }
+            window.removeEventListener("mousedown", close);
+            dialog.addEventListener("transitionend", function() {
+                dialog.remove();
+                editor.destroy();
+            });
+        }
+    }
+    window.addEventListener("mousedown", close);
+    editor.focus()
+    editor.commands.bindKey("Esc", function() { close(); });
+}
+
+
 require("ace/ext/language_tools");
+require("ace/ext/inline_autocomplete");
 env.editor.setOptions({
     enableBasicAutocompletion: true,
+    enableInlineAutocompletion: true,
     enableSnippets: true
 });
 
@@ -543,4 +863,10 @@ function moveFocus() {
         env.editor.focus();
 }
 
-});
+window.onbeforeunload = function () {
+    if (env.editor && localStorage) {
+        var sessionObj = env.editor.session.toJSON();
+        sessionObj.name = util.getOption("doc") || "JavaScript";
+        localStorage.last_session = JSON.stringify(sessionObj);
+    }
+};

@@ -4,11 +4,9 @@ var util = require("util");
 var cssParse = require("css-parse");
 var cssStringify = require("css-stringify");
 
-var parseString = require("plist").parseString;
+var parse = require("plist").parse;
 function parseTheme(themeXml, callback) {
-    parseString(themeXml, function(_, theme) {
-        callback(theme[0])
-    });
+    callback(parse(themeXml));
 }
 
 var unsupportedScopes = { };
@@ -283,11 +281,15 @@ var themes = {
     "merbivore_soft": "Merbivore Soft",
     "mono_industrial": "monoindustrial",
     "monokai": "Monokai",
+    "nord_dark": "Nord Dark",
+    "one_dark": "One Dark",
     "pastel_on_dark": "Pastels on Dark",
     "solarized_dark": "Solarized-dark",
     "solarized_light": "Solarized-light",
     "katzenmilch": "Katzenmilch",
     "kuroir": "Kuroir Theme",
+    "gruvbox_dark_hard": "gruvboxDarkHard",
+    "gruvbox_light_hard": "gruvboxLightHard",
     //"textmate": "Textmate (Mac Classic)",
     "tomorrow": "Tomorrow",
     "tomorrow_night": "Tomorrow-Night",
@@ -397,7 +399,7 @@ if (Object.keys(unsupportedScopes).length > 0) {
     console.log("I found these unsupported scopes:");
     console.log(sortedUnsupportedScopes);
     console.log("It's safe to ignore these, but they may affect your syntax highlighting if your mode depends on any of these rules.");
-    console.log("Refer to the docs on ace.ajax.org for information on how to add a scope to the CSS generator.");
+    console.log("Refer to the docs on ace.c9.io for information on how to add a scope to the CSS generator.");
 }
 
 
